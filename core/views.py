@@ -1,0 +1,299 @@
+from django.shortcuts import render , get_object_or_404
+
+import os
+from django.conf import settings
+from django.http import HttpResponse , JsonResponse
+from django.views import View
+
+from rest_framework import viewsets , filters , permissions , status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import IsAuthenticated
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.exceptions import ValidationError
+
+from django.db.models import F , Q , ExpressionWrapper , FloatField
+from django.db import transaction
+
+from .models import (
+	Category , SubCategory , Brand , Manufacturer ,
+	SaltComposition , Product ,  # Review
+	Address , Cart , Wishlist , Order , OrderItem
+)
+from .serializers import (
+	CategorySerializer , SubCategorySerializer , BrandSerializer ,
+	ManufacturerSerializer , SaltCompositionSerializer ,
+	ProductSerializer ,  # ReviewSerializer
+	AddressSerializer , CartSerializer , WishlistSerializer ,
+	OrderSerializer , OrderItemSerializer , CheckoutSerializer ,
+)
+
+from .filters import ProductFilter
+
+
+# Create your views here.
+
+
+class ReactAppView(View):
+	def get(self , request , *args , **kwargs):
+		index_file = os.path.join(settings.REACT_BUILD_DIR , "index.html")
+		if os.path.exists(index_file):
+			with open(index_file , "r" , encoding="utf-8") as f:
+				return HttpResponse(f.read())
+		return HttpResponse("React build not found. Run `npm run build`." , status=500)
+
+
+# class ProductPagination(PageNumberPagination):
+# 	page_size = 1
+# 	page_size_query_param = 'page_size'  # allow client to set page size
+# 	max_page_size = 100
+
+
+class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
+	queryset = Category.objects.all().order_by('name')
+	serializer_class = CategorySerializer
+	search_fields = ["name"]
+	filter_backends = [filters.SearchFilter , DjangoFilterBackend]
+	filterset_fields = ["slug"]
+	lookup_field = "slug"
+
+
+class SubCategoryViewSet(viewsets.ReadOnlyModelViewSet):
+	queryset = SubCategory.objects.all().select_related("category").order_by('category__name' , 'name')
+	serializer_class = SubCategorySerializer
+	search_fields = ["name"]
+	filter_backends = [filters.SearchFilter , DjangoFilterBackend]
+	filterset_fields = ["category" , "slug"]
+	
+	lookup_field = "slug"
+
+
+class BrandViewSet(viewsets.ReadOnlyModelViewSet):
+	queryset = Brand.objects.all().order_by('name')
+	serializer_class = BrandSerializer
+	search_fields = ["name"]
+	lookup_field = "slug"
+	filter_backends = [filters.SearchFilter , DjangoFilterBackend]
+
+
+class ManufacturerViewSet(viewsets.ReadOnlyModelViewSet):
+	queryset = Manufacturer.objects.all().order_by('name')
+	serializer_class = ManufacturerSerializer
+	search_fields = ["name" , "address"]
+	filter_backends = [filters.SearchFilter , DjangoFilterBackend]
+
+
+class SaltCompositionViewSet(viewsets.ReadOnlyModelViewSet):
+	queryset = SaltComposition.objects.all().order_by('name')
+	serializer_class = SaltCompositionSerializer
+	search_fields = ["name" , "strength"]
+	filter_backends = [filters.SearchFilter , DjangoFilterBackend]
+
+
+class ProductViewSet(viewsets.ReadOnlyModelViewSet):
+	queryset = (Product.objects.all().select_related(
+		"subcategory" , "brand" , "manufacturer"
+	).annotate(
+		discount_percentage=ExpressionWrapper(
+			(F('base_price') - F('selling_price')) * 100.0 / F('base_price') ,
+			output_field=FloatField()
+		)
+	).order_by('name'))
+	
+	serializer_class = ProductSerializer
+	# pagination_class = ProductPagination
+	filter_backends = [filters.SearchFilter , filters.OrderingFilter , DjangoFilterBackend]
+	
+	search_fields = ["name" , "description" , "uses" , "benefits"]
+	
+	filterset_class = ProductFilter
+	
+	ordering_fields = ["base_price" , "selling_price" , "created_at" , "stock"]
+	
+	lookup_field = "slug"
+
+
+class AddressViewSet(viewsets.ModelViewSet):
+	serializer_class = AddressSerializer
+	permission_classes = [permissions.IsAuthenticated]
+	
+	def get_queryset(self):
+		return Address.objects.filter(user=self.request.user)
+	
+	def perform_create(self , serializer):
+		serializer.save(user=self.request.user)
+
+
+class CartViewSet(viewsets.ModelViewSet):
+	serializer_class = CartSerializer
+	permission_classes = [permissions.IsAuthenticated]
+	
+	def get_queryset(self):
+		return (
+			Cart.objects
+			.filter(user=self.request.user)
+			.select_related("product")
+			.prefetch_related("product__images")
+		)
+	
+	# Add total price for list API
+	def list(self , request , *args , **kwargs):
+		queryset = self.get_queryset()
+		serializer = self.get_serializer(queryset , many=True)
+		
+		total_amount = sum(
+			item.product.selling_price * item.quantity
+			for item in queryset
+		)
+		
+		return Response({
+			"count": queryset.count() ,
+			"total_amount": total_amount ,
+			"results": serializer.data
+		})
+	
+	# Add-to-cart logic (avoid duplicates)
+	def create(self , request , *args , **kwargs):
+		user = request.user
+		product_id = request.data.get("product")
+		quantity = int(request.data.get("quantity" , 1))
+		
+		if not product_id:
+			return Response({"error": "Product is required"} , status=400)
+		
+		existing_item = Cart.objects.filter(
+			user=user ,
+			product_id=product_id
+		).first()
+		
+		if existing_item:
+			existing_item.quantity += quantity
+			existing_item.save()
+			return Response(self.get_serializer(existing_item).data , status=200)
+		
+		return super().create(request , *args , **kwargs)
+	
+	def perform_create(self , serializer):
+		serializer.save(user=self.request.user)
+
+
+class WishlistViewSet(viewsets.ModelViewSet):
+	serializer_class = WishlistSerializer
+	permission_classes = [permissions.IsAuthenticated]
+	
+	def get_queryset(self):
+		return Wishlist.objects.filter(user=self.request.user)
+	
+	def perform_create(self , serializer):
+		serializer.save(user=self.request.user)
+
+
+class OrderViewSet(viewsets.ReadOnlyModelViewSet):
+	serializer_class = OrderSerializer
+	permission_classes = [permissions.IsAuthenticated]
+	
+	def get_queryset(self):
+		return (
+			Order.objects.filter(user=self.request.user)
+			.prefetch_related("items__product")
+			.select_related("address")
+		)
+
+
+class OrderItemViewSet(viewsets.ReadOnlyModelViewSet):
+	serializer_class = OrderItemSerializer
+	permission_classes = [permissions.IsAuthenticated]
+	
+	def get_queryset(self):
+		return OrderItem.objects.filter(order__user=self.request.user)
+
+
+class CheckoutAPIView(APIView):
+	permission_classes = [IsAuthenticated]
+	
+	@transaction.atomic
+	def post(self , request):
+		serializer = CheckoutSerializer(
+			data=request.data ,
+			context={"request": request}
+		)
+		serializer.is_valid(raise_exception=True)
+		
+		user = request.user
+		address_id = serializer.validated_data["address_id"]
+		
+		# Fetch cart items
+		cart_items = (
+			Cart.objects
+			.filter(user=user)
+			.select_related("product")
+		)
+		
+		if not cart_items.exists():
+			return Response(
+				{"error": "Cart is empty"} ,
+				status=status.HTTP_400_BAD_REQUEST
+			)
+		
+		# Create Order
+		order = Order.objects.create(
+			user=user ,
+			address_id=address_id ,
+			order_status="pending" ,
+			payment_status="pending" ,
+		)
+		
+		total_amount = 0
+		
+		# Process each cart item
+		for cart_item in cart_items:
+			product = cart_item.product
+			quantity = cart_item.quantity
+			
+			# Stock validation
+			if product.stock < quantity:
+				raise ValidationError(f"Insufficient stock for {product.name}")
+			
+			# Create order item (price snapshot)
+			OrderItem.objects.create(
+				order=order ,
+				product=product ,
+				quantity=quantity ,
+				price=product.selling_price ,
+			)
+			
+			# Reduce stock
+			product.stock -= quantity
+			if product.stock == 0:
+				product.available = False
+			product.save(update_fields=["stock" , "available"])
+			
+			total_amount += product.selling_price * quantity
+		
+		# Update order total
+		order.total_amount = total_amount
+		order.save(update_fields=["total_amount"])
+		
+		# Clear cart
+		cart_items.delete()
+		
+		return Response(
+			{
+				"message": "Order placed successfully" ,
+				"order": OrderSerializer(order).data
+			} ,
+			status=status.HTTP_201_CREATED
+		)
+
+# class ReviewViewSet(viewsets.ModelViewSet):
+#
+# 	permission_classes = [IsAuthenticated]
+#
+# 	queryset = Review.objects.all().select_related("product" , "user").order_by('-created_at')
+# 	serializer_class = ReviewSerializer
+# 	filter_backends = [filters.SearchFilter , DjangoFilterBackend]
+# 	search_fields = ["comment"]
+# 	filterset_fields = ["product" , "user" , "rating"]
+#   filterset_fields = ["product" , "rating"]
+#
