@@ -2,3 +2,92 @@
 .env.*
 __pycache__/
 *.pyc
+# =========================
+# Django & DRF
+# =========================
+*.log
+*.pot
+#db.sqlite3
+#media/
+#staticfiles/
+#static/
+
+# =========================
+# Virtual Environments
+# =========================
+venv/
+env/
+ENV/
+.venv/
+.virtualenv/
+pip-wheel-metadata/
+*.egg-info/
+*.egg
+#dist/
+#build/
+
+# =========================
+# Environment / Secrets
+# =========================
+*.pem
+*.key
+secrets.json
+
+# =========================
+# VSCode
+# =========================
+.vscode/
+.history/
+*.code-workspace
+
+# =========================
+# JetBrains (PyCharm, IntelliJ)
+# =========================
+.idea/
+*.iml
+out/
+# JetBrains caches
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/dictionaries
+.idea/**/shelf
+.idea/**/httpRequests
+.idea/**/dataSources/
+.idea/**/dataSources.local.xml
+.idea/**/sqlDataSources.xml
+.idea/**/dynamic.xml
+.idea/**/uiDesigner.xml
+
+# =========================
+# OS & System Files
+# =========================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# =========================
+# Testing & Coverage
+# =========================
+.coverage
+.tox/
+.nox/
+pytest_cache/
+htmlcov/
+coverage.xml
+*.cover
+test-results.xml
+
+# =========================
+# Migrations (Optional)
+# Uncomment below if you want to ignore compiled migrations
+# =========================
+# */migrations/__pycache__/
+# */migrations/*.py
+
+# =========================
+# Local Config / Backup
+# =========================
+*.bak
+*.swp
+*.tmp
