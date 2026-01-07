@@ -10,7 +10,7 @@ from environ import Env
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 env = Env()
-Env.read_env()
+Env.read_env(BASE_DIR / ".env")
 
 SECRET_KEY = env("SECRET_KEY", default="unsafe-secret-key")
 
@@ -134,6 +134,11 @@ CORS_ALLOWED_ORIGINS = env.list(
     default=["http://localhost:5173"]
 )
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://aspidalifesciences.com",
+    "https://www.aspidalifesciences.com",
+]
+
 
 # ---------------------------------------------------------
 # INTERNATIONALIZATION
@@ -172,8 +177,11 @@ AUTH_USER_MODEL = "accounts.User"
 # EMAIL CONFIG (SMTP in production, console in local)
 # ---------------------------------------------------------
 
-SENDGRID_API_KEY = env("API_KEY")
-DEFAULT_FROM_EMAIL = env("FROM_EMAIL")
+SENDGRID_API_KEY = env("API_KEY", default=None)
+DEFAULT_FROM_EMAIL = env("FROM_EMAIL", default=None)
+
+if IS_PRODUCTION and not SENDGRID_API_KEY:
+    raise RuntimeError("SENDGRID API_KEY is missing")
 
 # if IS_PRODUCTION:
 #     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
@@ -237,4 +245,13 @@ PASSWORD_RESET_TIMEOUT = 600
 
 
 
+# Trust Nginx HTTPS
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Force HTTPS
+SECURE_SSL_REDIRECT = True
+
+# Cookies over HTTPS
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
 

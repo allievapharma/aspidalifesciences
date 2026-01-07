@@ -51,6 +51,7 @@ class ReactAppView(View):
 
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
+	permission_classes = [permissions.AllowAny]
 	queryset = Category.objects.all().order_by('name')
 	serializer_class = CategorySerializer
 	search_fields = ["name"]
@@ -60,6 +61,7 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class SubCategoryViewSet(viewsets.ReadOnlyModelViewSet):
+	permission_classes = [permissions.AllowAny]
 	queryset = SubCategory.objects.all().select_related("category").order_by('category__name' , 'name')
 	serializer_class = SubCategorySerializer
 	search_fields = ["name"]
@@ -70,6 +72,7 @@ class SubCategoryViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class BrandViewSet(viewsets.ReadOnlyModelViewSet):
+	permission_classes = [permissions.AllowAny]
 	queryset = Brand.objects.all().order_by('name')
 	serializer_class = BrandSerializer
 	search_fields = ["name"]
@@ -78,6 +81,7 @@ class BrandViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class ManufacturerViewSet(viewsets.ReadOnlyModelViewSet):
+	permission_classes = [permissions.AllowAny]
 	queryset = Manufacturer.objects.all().order_by('name')
 	serializer_class = ManufacturerSerializer
 	search_fields = ["name" , "address"]
@@ -85,6 +89,7 @@ class ManufacturerViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class SaltCompositionViewSet(viewsets.ReadOnlyModelViewSet):
+	permission_classes = [permissions.AllowAny]
 	queryset = SaltComposition.objects.all().order_by('name')
 	serializer_class = SaltCompositionSerializer
 	search_fields = ["name" , "strength"]
@@ -92,6 +97,7 @@ class SaltCompositionViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
+	permission_classes = [permissions.AllowAny]
 	queryset = (Product.objects.all().select_related(
 		"subcategory" , "brand" , "manufacturer"
 	).annotate(
